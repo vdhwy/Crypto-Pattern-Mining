@@ -64,13 +64,12 @@ def get_binance_historical_data(symbol, interval, start_str, end_str):
                     'Taker Buy Quote Asset Volume']
     df[numeric_cols] = df[numeric_cols].astype(float)
 
-    df = df[["Open Time","Open","High","Low","Close","Volume"]]
+    df = df[["Open Time","Open","High","Low","Close"]]
     df.rename(columns={"Open Time": "date"}, inplace=True)
     df.rename(columns={"Open": "open"}, inplace=True)
     df.rename(columns={"High": "high"}, inplace=True)
     df.rename(columns={"Low": "low"}, inplace=True)
     df.rename(columns={"Close": "close"}, inplace=True)
-    df.rename(columns={"Volume": "volume"}, inplace=True)
     
     return df
 

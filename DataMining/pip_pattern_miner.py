@@ -254,29 +254,49 @@ if __name__ == '__main__':
 
     plt.style.use('dark_background')
 
-    data = data[data.index < '01-01-2020']
+    # The BTCUSDT_1h.csv starts at 2019-12-31, so filtering < 2020 leaves only 2 rows.
+    # Using data < 2023 instead to give the miner enough data to find patterns.
+    data = data[data.index < '01-01-2024']
     arr = data['close'].to_numpy()
     pip_miner = PIPPatternMiner(n_pips=5, lookback=24, hold_period=6)
     pip_miner.train(arr, n_reps=-1)
-
-    '''
+    
+    
     # Monte Carlo test, takes about an hour..
     pip_miner.train(arr, n_reps=100)
     
     plt.style.use('dark_background')
     actual_martin = pip_miner.get_fit_martin()
     perm_martins = pip_miner.get_permutation_martins()
-    ax = pd.Series(perm_martins).hist()
+    
+    # Calculate p-value based on permutations
+    p_val = np.sum(np.array(perm_martins) >= actual_martin) / len(perm_martins) if len(perm_martins) > 0 else 0
+    
+    # Generate Plot
+    fig, ax = plt.subplots(figsize=(8,4))
+    if len(perm_martins) > 0:
+        ax = pd.Series(perm_martins).hist(ax=ax, bins=50)
     ax.set_ylabel("# Of Permutations")
     ax.set_xlabel("Martin Ratio")
-    ax.set_title("Permutation's Martin Ratio BTC-USDT 1H 2018-2020")
-    ax.axvline(actual_martin, color='red')
-    '''
-
-
-
-
-
-
+    ax.set_title(f"Permutations Martin Ratio BTC-USDT (p-val: {p_val:.3f})")
+    ax.axvline(actual_martin, color='red', label=f'Actual ({actual_martin:.2f})')
+    ax.legend()
     
-
+    # Save the plot results
+    plot_filename = 'mcpt_test_results.jpeg'
+    plt.savefig(plot_filename, format='jpeg', bbox_inches='tight')
+    print(f"Saved plot to {plot_filename}")
+    
+    # Save text results
+    results_filename = 'mcpt_test_results.txt'
+    with open(results_filename, 'w') as f:
+        f.write("Monte Carlo Permutation Test Results\n")
+        f.write("====================================\n")
+        f.write(f"Actual Martin Ratio: {actual_martin:.4f}\n")
+        f.write(f"P-Value: {p_val:.4f}\n")
+        f.write(f"Number of Permutations: {len(perm_martins)}\n")
+        f.write("====================================\n")
+        f.write("Permutation Martins:\n")
+        f.write(str(perm_martins))
+        
+    print(f"Saved statistical results to {results_filename}")
