@@ -17,9 +17,6 @@ from dotenv import load_dotenv
 from pip_pattern_miner import PIPPatternMiner
 from perceptually_important import find_pips
 
-# ==========================================
-# 🛑 INSERT YOUR ALPACA PAPER API KEYS HERE
-# ==========================================
 load_dotenv() 
 
 # Pull the keys securely into your script
