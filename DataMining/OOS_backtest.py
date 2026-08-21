@@ -110,11 +110,22 @@ def main():
         oos_returns.extend(test_actual_returns)
         oos_positions.extend(pos_array)
         
+        strat_hourly_returns = pos_array * test_actual_returns
+        
+        # Calculate annualized Sharpe Ratio for 1h data (8760 hours/year)
+        # Assuming a risk-free rate of 0 for simplicity in crypto
+        mean_ret = np.mean(strat_hourly_returns)
+        std_ret = np.std(strat_hourly_returns)
+
+        if std_ret > 0:
+            sharpe_ratio = (mean_ret / std_ret) * np.sqrt(8760)
+        else:
+            sharpe_ratio = 0.0
+        
         # Quick summary for the year
         year_strat_ret = np.exp(np.cumsum(pos_array * test_actual_returns))[-1] - 1
         year_bh_ret = np.exp(np.cumsum(test_actual_returns))[-1] - 1
-        print(f"   -> OOS Strategy: {year_strat_ret*100:>7.2f}% | Benchmark: {year_bh_ret*100:>7.2f}%")
-
+        print(f"   -> OOS Strategy: {year_strat_ret*100:>7.2f}% | Benchmark: {year_bh_ret*100:>7.2f}% | Sharpe: {sharpe_ratio:>5.2f}")
     # --- Compile Final Master OOS Metrics ---
     oos_dates = pd.to_datetime(oos_dates)
     oos_returns = np.array(oos_returns)
@@ -129,11 +140,21 @@ def main():
     max_dd = np.min(drawdown) * 100
     win_rate = (trades_won / total_trades * 100) if total_trades > 0 else 0
 
+    mean_strat = np.mean(strat_log_returns)
+    std_strat = np.std(strat_log_returns)
+    final_sharpe = (mean_strat / std_strat) * np.sqrt(8760) if std_strat > 0 else 0.0
+
+    mean_bh = np.mean(oos_returns)
+    std_bh = np.std(oos_returns)
+    final_bh_sharpe = (mean_bh / std_bh) * np.sqrt(8760) if std_bh > 0 else 0.0
+
     print("\n" + "="*50)
     print("🏆 FINAL TRUE OUT-OF-SAMPLE METRICS 🏆")
     print("="*50)
     print(f"Total True Return:    {(eq_strat[-1] - 1) * 100:>8.2f}%")
     print(f"Buy & Hold Benchmark: {(eq_bh[-1] - 1) * 100:>8.2f}%")
+    print(f"Strategy Sharpe:      {final_sharpe:>8.2f}")
+    print(f"Benchmark Sharpe:     {final_bh_sharpe:>8.2f}")
     print(f"Maximum Drawdown:     {max_dd:>8.2f}%")
     print(f"Total Trades Taken:   {total_trades}")
     print(f"True Win Rate:        {win_rate:>8.2f}%")

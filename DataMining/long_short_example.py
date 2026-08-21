@@ -50,7 +50,7 @@ def main():
     HOLD_PERIOD = 6
     NUM_EXAMPLES = 9 # We will find 4 Longs and 4 Shorts for a 2x4 grid
 
-    print("Initializing Walk-Forward Miner...")
+    print("Initializing Data Miner...")
     wf_miner = WFPIPMiner(
         n_pips=N_PIPS, 
         lookback=LOOKBACK, 
@@ -88,7 +88,7 @@ def main():
     # --- Create the Grid Plot ---
     plt.style.use('dark_background')
     fig, axs = plt.subplots(2, NUM_EXAMPLES, figsize=(16, 8))
-    fig.suptitle("Walk-Forward Strategy: Long vs. Short Triggers", fontsize=18, fontweight='bold', color='white')
+    fig.suptitle("Long vs. Short Triggers", fontsize=18, fontweight='bold', color='white')
 
     # Plot Longs on the Top Row (Row 0)
     for i, data_slice in enumerate(long_slices):

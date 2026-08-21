@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 # Import your custom modules
 from pip_pattern_miner import PIPPatternMiner
@@ -8,15 +9,16 @@ from perceptually_important import find_pips
 
 def main():
     print("Loading BTC dataset...")
-    try:
-        # Update filename if yours is different
-        data = pd.read_csv('BTCUSDT_1h.csv') 
-    except FileNotFoundError:
-        print("Error: Could not find your CSV file.")
-        return
 
-    data['date'] = data['date'].astype('datetime64[s]')
+    try:
+        data = pd.read_csv('BTCUSDT_1h.csv')
+    except FileNotFoundError:
+        print('Error: Could not find path')
+        return
+    
+    data['date'] = pd.to_datetime(data['date'])
     data = data.set_index('date')
+    data['year'] = data.index.year
     
     # We must use log prices for the algorithm
     log_data = np.log(data)
@@ -100,12 +102,23 @@ def main():
     eq_short = np.exp(np.cumsum(pos_short * returns))
     eq_bh = np.exp(np.cumsum(returns)) # Buy and Hold Benchmark
 
+    # --- 5. Calculate Sharpe Ratios ---
+    def calc_sharpe(ret_array):
+        mean_r = np.mean(ret_array)
+        std_r = np.std(ret_array)
+        return (mean_r / std_r) * np.sqrt(8760) if std_r > 0 else 0.0
+
+    sharpe_combined = calc_sharpe(pos_combined * returns)
+    sharpe_long = calc_sharpe(pos_long * returns)
+    sharpe_short = calc_sharpe(pos_short * returns)
+    sharpe_bh = calc_sharpe(returns)
+
     # Print summary statistics
     print("\n--- IN-SAMPLE Performance Summary (Pre-2024) ---")
-    print(f"Combined Strategy Return: {(eq_combined[-1] - 1) * 100:>8.2f}%")
-    print(f"Long-Only Return:         {(eq_long[-1] - 1) * 100:>8.2f}%")
-    print(f"Short-Only Return:        {(eq_short[-1] - 1) * 100:>8.2f}%")
-    print(f"Buy & Hold Return:        {(eq_bh[-1] - 1) * 100:>8.2f}%")
+    print(f"Combined Strategy Return: {(eq_combined[-1] - 1) * 100:>8.2f}% | Sharpe: {sharpe_combined:>5.2f}")
+    print(f"Long-Only Return:         {(eq_long[-1] - 1) * 100:>8.2f}% | Sharpe: {sharpe_long:>5.2f}")
+    print(f"Short-Only Return:        {(eq_short[-1] - 1) * 100:>8.2f}% | Sharpe: {sharpe_short:>5.2f}")
+    print(f"Buy & Hold Return:        {(eq_bh[-1] - 1) * 100:>8.2f}% | Sharpe: {sharpe_bh:>5.2f}")
 
     # --- 5. Visualize Results ---
     plt.style.use('dark_background')
