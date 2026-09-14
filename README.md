@@ -247,11 +247,11 @@ A small *p*-value (e.g., < 0.10) indicates that the actual strategy's performanc
 
 | Metric | Value |
 |--------|-------|
-| Actual Martin Ratio | **22.87** |
+| Actual Martin Ratio | **30.52** |
 | Number of Permutations | 99 |
-| p-value | **0.071** |
+| p-value | **0.010** |
 
-The actual strategy's Martin Ratio of 22.87 exceeds ~93% of the permutation distribution, yielding a p-value of 0.071 — significant at the 10% level, providing evidence that the discovered patterns capture genuine structure in BTC/USDT price dynamics.
+The actual strategy's Martin Ratio of 30.52 exceeds ~99% of the permutation distribution, yielding a p-value of 0.010 — significant at the 1% level, providing strong evidence that the discovered patterns capture genuine structure in BTC/USDT price dynamics.
 
 ---
 
@@ -290,6 +290,7 @@ DataMining/
 ├── OOS_backtest.py               # Walk-forward out-of-sample backtest
 ├── long_short_example.py         # Visualise long/short signal triggers
 ├── mining_patterns.ipynb         # Notebook: cluster visualisation & export
+├── export_results.py             # Export all pipeline results as images
 ├── paper_trading.py              # Live paper trading bot (Alpaca API)
 │
 ├── BTCUSDT_1h.csv                # Hourly BTC/USDT data (2020–2025)
@@ -298,6 +299,13 @@ DataMining/
 ├── PIP.png                       # PIP illustration figure
 ├── mcpt_test_results.jpeg        # MCPT histogram plot
 ├── mcpt_test_results.txt         # MCPT numerical results
+│
+├── results/                      # Exported result images for README
+│   ├── pip_miner_mcpt.png        # MCPT histogram
+│   ├── cluster_archetypes.png    # Cluster archetype grid
+│   ├── IS_backtest_results.png   # In-sample equity curves
+│   ├── long_short_results.png    # Long/short trigger examples
+│   └── OOS_backtest_results.png  # OOS equity curve + drawdown
 │
 ├── cluster_visualizations/       # 5×5 grid plots for each cluster
 ├── all_clusters_visualized/      # Individual member plots per cluster
@@ -355,9 +363,93 @@ python paper_trading.py
 
 ## Results
 
-- The PIP-based pattern miner discovers **16 unique cluster archetypes** in BTC/USDT hourly data.
-- The combined long/short strategy achieves a Martin Ratio of **22.87** in-sample.
-- The Monte Carlo Permutation Test yields a p-value of **0.071**, confirming that the pattern-based edge is unlikely to be a random artefact at the 10% significance level.
+### Pattern Mining & Monte Carlo Validation (`pip_pattern_miner.py`)
+
+The PIP-based miner discovers **unique cluster archetypes** in BTC/USDT hourly data. Each cluster represents a canonical candlestick pattern shape, identified via K-Means clustering on Z-score normalized PIP vectors.
+
+#### Discovered Cluster Archetypes
+
+A representative sample of the discovered clusters, showing one candlestick exemplar per archetype with PIP overlay (white lines). The **Long** and **Short** labels indicate clusters assigned as directional signals based on their Martin Ratio:
+
+<p align="center">
+  <img src="DataMining/results/cluster_archetypes.png" alt="Cluster Archetypes" width="100%"/>
+</p>
+
+#### Monte Carlo Permutation Test
+
+The MCPT validates that the strategy's edge is genuine and not an artefact of overfitting. The actual strategy's Martin Ratio is compared against 99 permutations with shuffled returns:
+
+<p align="center">
+  <img src="DataMining/results/pip_miner_mcpt.png" alt="MCPT Histogram" width="80%"/>
+</p>
+
+| Metric | Value |
+|--------|-------|
+| Actual Martin Ratio | **30.52** |
+| Number of Permutations | 99 |
+| p-value | **0.010** |
+
+The actual strategy's Martin Ratio of 30.52 exceeds ~99% of the permutation distribution, yielding a p-value of 0.010 — **significant at the 1% level**, providing strong evidence that the discovered patterns capture genuine structure in BTC/USDT price dynamics.
+
+---
+
+### In-Sample Backtest (`IS_backtest.py`)
+
+Trained on pre-2024 data, the miner generates long-only, short-only, and combined equity curves:
+
+<p align="center">
+  <img src="DataMining/results/IS_backtest_results.png" alt="In-Sample Backtest" width="100%"/>
+</p>
+
+| Portfolio | Return | Annualized Sharpe |
+|-----------|--------|-------------------|
+| **Combined Strategy** | **1635.10%** | **1.75** |
+| Long Only | 441.16% | 1.55 |
+| Short Only | 250.79% | 1.03 |
+| Buy & Hold | 487.23% | 0.64 |
+
+The combined long/short strategy significantly outperforms Buy & Hold on a risk-adjusted basis (Sharpe 1.75 vs 0.64), demonstrating the value of the discovered directional pattern signals.
+
+---
+
+### Long / Short Signal Visualisation (`long_short_example.py`)
+
+Concrete examples of patterns that triggered **Long** (top row) vs. **Short** (bottom row) signals under the walk-forward strategy. Each chart shows a 24-hour candlestick window with PIP overlay:
+
+<p align="center">
+  <img src="DataMining/results/long_short_results.png" alt="Long vs Short Triggers" width="100%"/>
+</p>
+
+---
+
+### Walk-Forward Out-of-Sample Backtest (`OOS_backtest.py`)
+
+The walk-forward OOS backtest uses rolling 2-year training windows to test on unseen 1-year periods:
+
+<p align="center">
+  <img src="DataMining/results/OOS_backtest_results.png" alt="OOS Backtest" width="100%"/>
+</p>
+
+#### Per-Window Performance
+
+| Window | Training | Testing | Strategy Return | Benchmark Return | Sharpe |
+|--------|----------|---------|-----------------|------------------|--------|
+| 1 | 2019–2020 | 2021 | +72.81% | +130.84% | 1.30 |
+| 2 | 2020–2021 | 2022 | **+21.23%** | **-56.55%** | 0.47 |
+| 3 | 2021–2022 | 2023 | +18.98% | +180.00% | 0.78 |
+| 4 | 2022–2023 | 2024 | +32.94% | +152.84% | 1.26 |
+
+#### Aggregate OOS Metrics
+
+| Metric | Strategy | Benchmark |
+|--------|----------|-----------|
+| **Total Return** | **231.37%** | 610.03% |
+| **Annualized Sharpe** | **0.90** | 0.77 |
+| **Maximum Drawdown** | **-23.15%** | — |
+| Total Trades | 1,591 | — |
+| Win Rate | 49.84% | — |
+
+Key takeaway: while Buy & Hold captures more absolute return during strong bull markets, the strategy achieves a **higher Sharpe Ratio (0.90 vs 0.77)** out-of-sample with significantly **lower drawdowns (-23.15%)**. Notably, during the 2022 bear market, the strategy returned **+21.23%** while the benchmark lost **-56.55%**.
 
 ---
 
