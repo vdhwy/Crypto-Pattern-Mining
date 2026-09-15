@@ -26,8 +26,8 @@
 Technical analysis is widely practiced in cryptocurrency markets, yet the subjective nature of chart-pattern recognition limits its reproducibility. This project bridges that gap by automating the entire pattern-discovery pipeline:
 
 1. **Crawl** hourly OHLCV data from the Binance REST API for assets such as BTC/USDT or ETH/USDT.
-2. **Extract** the *Perceptually Important Points* (PIPs) of each rolling price window to compress raw candlestick data into a compact polyline that captures the dominant trend structure.
-3. **Cluster** the normalized PIP vectors with K-Means (optimal *k* chosen by silhouette search) to discover canonical pattern archetypes.
+2. **Extract** the _Perceptually Important Points_ (PIPs) of each rolling price window to compress raw candlestick data into a compact polyline that captures the dominant trend structure.
+3. **Cluster** the normalized PIP vectors with K-Means (optimal _k_ chosen by silhouette search) to discover canonical pattern archetypes.
 4. **Assign** each cluster a directional bias (long / short / neutral) based on the forward returns of its member patterns, measured by the Martin Ratio.
 5. **Validate** whether the resulting strategy edge is genuine or an artefact of overfitting by running a **Monte Carlo Permutation Test** on 99 synthetic price paths.
 
@@ -75,12 +75,12 @@ Binance API ──► Raw 1h OHLCV ──► Log Prices ──► Sliding Window
 
 Historical candlestick data is fetched from the [Binance public REST API](https://binance-docs.github.io/apidocs/) (`GET /api/v3/klines`). The crawler paginates automatically through the `startTime` / `endTime` parameters (limit = 1 000 candles per request) and respects API rate limits with a 100 ms sleep between calls.
 
-| Parameter | Value |
-|-----------|-------|
-| Symbol | `BTCUSDT` |
-| Interval | `1h` (hourly) |
-| Date range | 2020-01-01 → 2025-01-01 |
-| Output | `BTCUSDT_1h.csv` (~43 800 candles) |
+| Parameter  | Value                              |
+| ---------- | ---------------------------------- |
+| Symbol     | `BTCUSDT`                          |
+| Interval   | `1h` (hourly)                      |
+| Date range | 2020-01-01 → 2025-01-01            |
+| Output     | `BTCUSDT_1h.csv` (~43 800 candles) |
 
 The resulting CSV contains columns: `date`, `open`, `high`, `low`, `close`.
 
@@ -96,51 +96,40 @@ Perceptually Important Points is a time-series compression technique originally 
 
 ### How the Algorithm Works
 
-Given a price window of length *L* and a target count *n* of important points, the algorithm proceeds iteratively:
+Given a price window of length _L_ and a target count _n_ of important points, the algorithm proceeds iteratively:
 
 1. **Initialise** with the two endpoints of the window (the first and last prices). These are always perceptually important because they define the boundaries.
 
-2. **For each subsequent point** (from the 3rd up to the *n*-th):
+2. **For each subsequent point** (from the 3rd up to the _n_-th):
    - For every adjacent pair of already-selected PIPs, compute the line segment connecting them.
-   - For every candidate point *between* each pair, compute a **distance metric** from the candidate to the connecting line segment.
+   - For every candidate point _between_ each pair, compute a **distance metric** from the candidate to the connecting line segment.
    - Select the candidate with the **maximum distance** across all segments and insert it into the PIP list in sorted order.
 
-3. **Repeat** until exactly *n* PIPs have been identified.
+3. **Repeat** until exactly _n_ PIPs have been identified.
 
 The algorithm supports three distance metrics:
 
-| ID | Metric | Formula |
-|----|--------|---------|
-| 1 | **Euclidean** | Sum of Euclidean distances to both adjacent PIPs |
-| 2 | **Perpendicular** | Shortest perpendicular distance to the line segment between adjacent PIPs |
-| 3 | **Vertical** | Absolute vertical distance between the candidate price and the interpolated price on the connecting line |
+| ID  | Metric            | Formula                                                                                                  |
+| --- | ----------------- | -------------------------------------------------------------------------------------------------------- |
+| 1   | **Euclidean**     | Sum of Euclidean distances to both adjacent PIPs                                                         |
+| 2   | **Perpendicular** | Shortest perpendicular distance to the line segment between adjacent PIPs                                |
+| 3   | **Vertical**      | Absolute vertical distance between the candidate price and the interpolated price on the connecting line |
 
 This project uses **Vertical Distance** (metric 3), which is the most natural measure for price data since the x-axis (time) and y-axis (price) have different units.
 
 ### Why PIPs?
 
 - **Dimensionality reduction**: A 24-bar lookback window is compressed to just 5 price values, enabling efficient clustering.
-- **Translation & scale invariance**: After Z-score normalisation, the PIP vector captures the *shape* of the price movement regardless of absolute price level or volatility.
+- **Translation & scale invariance**: After Z-score normalisation, the PIP vector captures the _shape_ of the price movement regardless of absolute price level or volatility.
 - **Noise filtering**: Only the most significant turning points survive, suppressing intra-bar noise.
 
 ### Example
 
 For a 24-hour window with `n_pips = 5`, the algorithm identifies 5 dominant turning points. Connecting them with line segments produces a piecewise-linear approximation of the price trend — the "skeleton" of the candlestick pattern.
 
-```
-  Price
-    │        *  (PIP 3)
-    │       / \
-    │      /   \        * (PIP 5 = endpoint)
-    │     /     \      /
-    │    /       \    /
-    │   *         \  /
-    │  (PIP 2)     *
-    │             (PIP 4)
-    │
-    * (PIP 1 = start)
-    └──────────────────────► Time
-```
+<p align="center">
+  <img src="DataMining/PIP.png" alt="PIP" width="100%"/>
+</p>
 
 ---
 
@@ -150,17 +139,17 @@ For a 24-hour window with `n_pips = 5`, the algorithm identifies 5 dominant turn
 
 ### Unique Pattern Extraction
 
-A sliding window of `lookback = 24` bars advances one bar at a time across the log-price series. At each position the 5-PIP vector is computed. Consecutive windows that share the same internal PIP indices (i.e., the turning points haven't shifted) are deduplicated, retaining only *unique* pattern instances.
+A sliding window of `lookback = 24` bars advances one bar at a time across the log-price series. At each position the 5-PIP vector is computed. Consecutive windows that share the same internal PIP indices (i.e., the turning points haven't shifted) are deduplicated, retaining only _unique_ pattern instances.
 
-Each unique PIP vector is then **Z-score normalised** (zero mean, unit variance) so that patterns of the same *shape* cluster together regardless of whether BTC was trading at \$10 000 or \$60 000.
+Each unique PIP vector is then **Z-score normalised** (zero mean, unit variance) so that patterns of the same _shape_ cluster together regardless of whether BTC was trading at \$10 000 or \$60 000.
 
 ### Optimal Cluster Count
 
-The number of clusters *k* is **not** hand-picked. Instead, a **Silhouette K-Search** (from `pyclustering`) sweeps *k* ∈ [5, 40] and selects the value that maximises the mean silhouette score — a measure of how cohesive and well-separated the clusters are.
+The number of clusters _k_ is **not** hand-picked. Instead, a **Silhouette K-Search** (from `pyclustering`) sweeps _k_ ∈ [5, 40] and selects the value that maximises the mean silhouette score — a measure of how cohesive and well-separated the clusters are.
 
 ### K-Means Clustering
 
-K-Means++ initialisation followed by Lloyd's algorithm groups the normalised PIP vectors into *k* clusters. Each cluster represents a **canonical pattern archetype** — a family of price movements that share a common shape.
+K-Means++ initialisation followed by Lloyd's algorithm groups the normalised PIP vectors into _k_ clusters. Each cluster represents a **canonical pattern archetype** — a family of price movements that share a common shape.
 
 ### Cluster → Signal Assignment
 
@@ -188,11 +177,11 @@ Equity curves for all three strategies plus a Buy & Hold benchmark are plotted.
 
 Implements a rigorous **rolling walk-forward** framework to prevent look-ahead bias:
 
-| Window | Training | Testing |
-|--------|----------|---------|
-| 1 | 2020–2021 | 2022 |
-| 2 | 2021–2022 | 2023 |
-| 3 | 2022–2023 | 2024 |
+| Window | Training  | Testing |
+| ------ | --------- | ------- |
+| 1      | 2020–2021 | 2022    |
+| 2      | 2021–2022 | 2023    |
+| 3      | 2022–2023 | 2024    |
 
 At each step the model is retrained from scratch on the 2-year training window, then evaluated on the subsequent unseen year. The concatenated OOS equity curve and drawdown are plotted.
 
@@ -213,6 +202,7 @@ Generates a 2 × 9 grid of candlestick charts with PIP overlay, showing concrete
 **Notebook:** [`mining_patterns.ipynb`](mining_patterns.ipynb)
 
 Trains the miner and saves:
+
 - A **5 × 5 grid** of candlestick exemplars for each of the 16 discovered clusters → [`cluster_visualizations/`](cluster_visualizations/)
 - Individual member charts for every pattern instance → [`all_clusters_visualized/`](all_clusters_visualized/)
 
@@ -224,7 +214,7 @@ Trains the miner and saves:
 
 ### Motivation
 
-A strategy that outperforms on historical data may simply be exploiting random serial correlations in a single price path. The MCPT answers the question: *"Could this strategy have produced an equally strong Martin Ratio on a random price series with the same return distribution?"*
+A strategy that outperforms on historical data may simply be exploiting random serial correlations in a single price path. The MCPT answers the question: _"Could this strategy have produced an equally strong Martin Ratio on a random price series with the same return distribution?"_
 
 ### Procedure
 
@@ -237,19 +227,19 @@ A strategy that outperforms on historical data may simply be exploiting random s
    - Re-run the full pipeline (PIP extraction → silhouette search → K-Means → cluster assignment) on the synthetic path.
    - Record the permutation Martin Ratio ($M_{\text{perm}}^{(i)}$).
 
-3. **p-value**: 
+3. **p-value**:
 
 $$p = \frac{ | \{ i : M_{\text{perm}}^{(i)} \geq M_{\text{actual}} \} | }{ N_{\text{perms}} }$$
 
-A small *p*-value (e.g., < 0.10) indicates that the actual strategy's performance is unlikely to be explained by chance alone.
+A small _p_-value (e.g., < 0.10) indicates that the actual strategy's performance is unlikely to be explained by chance alone.
 
 ### Results
 
-| Metric | Value |
-|--------|-------|
-| Actual Martin Ratio | **30.52** |
-| Number of Permutations | 99 |
-| p-value | **0.010** |
+| Metric                 | Value     |
+| ---------------------- | --------- |
+| Actual Martin Ratio    | **30.52** |
+| Number of Permutations | 99        |
+| p-value                | **0.010** |
 
 The actual strategy's Martin Ratio of 30.52 exceeds ~99% of the permutation distribution, yielding a p-value of 0.010 — significant at the 1% level, providing strong evidence that the discovered patterns capture genuine structure in BTC/USDT price dynamics.
 
@@ -383,11 +373,11 @@ The MCPT validates that the strategy's edge is genuine and not an artefact of ov
   <img src="DataMining/results/pip_miner_mcpt.png" alt="MCPT Histogram" width="80%"/>
 </p>
 
-| Metric | Value |
-|--------|-------|
-| Actual Martin Ratio | **30.52** |
-| Number of Permutations | 99 |
-| p-value | **0.010** |
+| Metric                 | Value     |
+| ---------------------- | --------- |
+| Actual Martin Ratio    | **30.52** |
+| Number of Permutations | 99        |
+| p-value                | **0.010** |
 
 The actual strategy's Martin Ratio of 30.52 exceeds ~99% of the permutation distribution, yielding a p-value of 0.010 — **significant at the 1% level**, providing strong evidence that the discovered patterns capture genuine structure in BTC/USDT price dynamics.
 
@@ -401,12 +391,12 @@ Trained on pre-2024 data, the miner generates long-only, short-only, and combine
   <img src="DataMining/results/IS_backtest_results.png" alt="In-Sample Backtest" width="100%"/>
 </p>
 
-| Portfolio | Return | Annualized Sharpe |
-|-----------|--------|-------------------|
-| **Combined Strategy** | **330.03%** | **3.30** |
-| Long Only | 196.27% | 2.64 |
-| Short Only | 85.06% | 2.61 |
-| Buy & Hold | 487.23% | 0.64 |
+| Portfolio             | Return      | Annualized Sharpe |
+| --------------------- | ----------- | ----------------- |
+| **Combined Strategy** | **330.03%** | **3.30**          |
+| Long Only             | 196.27%     | 2.64              |
+| Short Only            | 85.06%      | 2.61              |
+| Buy & Hold            | 487.23%     | 0.64              |
 
 > **Note:** The combined long/short strategy has a much higher Sharpe Ratio (3.30 vs 0.64) than Buy & Hold despite lower absolute returns, because it is only exposed to the market during the 6-hour windows following a pattern signal — dramatically reducing risk.
 
@@ -432,24 +422,25 @@ The walk-forward OOS backtest uses rolling 2-year training windows to test on un
 
 #### Per-Window Performance
 
-| Window | Training | Testing | Strategy Return | Benchmark (B&H) | Sharpe | Longs | Shorts | Win Rate |
-|--------|----------|---------|-----------------|------------------|--------|-------|--------|----------|
-| 1 | 2019–2020 | 2021 | +33.47% | +59.34% | 1.04 | 165 | 220 | 52.7% |
-| 2 | 2020–2021 | 2022 | **+21.30%** | **-64.40%** | 0.63 | 131 | 280 | 52.3% |
-| 3 | 2021–2022 | 2023 | +10.41% | +156.07% | 0.31 | 204 | 210 | 51.0% |
-| 4 | 2022–2023 | 2024 | +6.22% | +120.49% | 0.26 | 254 | 162 | 48.6% |
+| Window | Training  | Testing | Strategy Return | Benchmark (B&H) | Sharpe | Longs | Shorts | Win Rate |
+| ------ | --------- | ------- | --------------- | --------------- | ------ | ----- | ------ | -------- |
+| 1      | 2019–2020 | 2021    | +33.47%         | +59.34%         | 1.04   | 165   | 220    | 52.7%    |
+| 2      | 2020–2021 | 2022    | **+21.30%**     | **-64.40%**     | 0.63   | 131   | 280    | 52.3%    |
+| 3      | 2021–2022 | 2023    | +10.41%         | +156.07%        | 0.31   | 204   | 210    | 51.0%    |
+| 4      | 2022–2023 | 2024    | +6.22%          | +120.49%        | 0.26   | 254   | 162    | 48.6%    |
 
 #### Aggregate OOS Metrics
 
-| Metric | Strategy | Benchmark |
-|--------|----------|-----------|
-| **Total Return** | **89.33%** | 359.85% |
-| **Annualized Sharpe** | **0.55** | 0.58 |
-| **Maximum Drawdown** | **-20.08%** | — |
-| Total Trades | 1,626 (754 Long / 872 Short) | — |
-| Win Rate | 51.18% | — |
+| Metric                | Strategy                     | Benchmark |
+| --------------------- | ---------------------------- | --------- |
+| **Total Return**      | **89.33%**                   | 359.85%   |
+| **Annualized Sharpe** | **0.55**                     | 0.58      |
+| **Maximum Drawdown**  | **-20.08%**                  | —         |
+| Total Trades          | 1,626 (754 Long / 872 Short) | —         |
+| Win Rate              | 51.18%                       | —         |
 
 Key takeaways:
+
 - The strategy is **profitable in every single OOS year**, including during the 2022 bear market where it returned **+21.30%** while Buy & Hold lost **-64.40%**.
 - The strategy significantly **underperforms Buy & Hold** in absolute return during strong bull markets (2023, 2024) because it is only in the market ~6 hours at a time when a signal fires.
 - The strategy maintains a **controlled drawdown (-20.08%)** compared to Buy & Hold's steep drawdowns during bear markets.
@@ -458,6 +449,6 @@ Key takeaways:
 
 ## References
 
-- Chung, F. L., Fu, T. C., Luk, R., & Ng, V. (2001). *Flexible time series pattern matching based on perceptually important points.* Workshop on Learning from Temporal and Spatial Data, IJCAI.
-- White, H. (2000). *A reality check for data snooping.* Econometrica, 68(5), 1097–1126.
-- Martin, P. G. & McCann, B. B. (1989). *The Investor's Guide to Fidelity Funds.* (Origin of the Ulcer Index and Martin Ratio.)
+- Chung, F. L., Fu, T. C., Luk, R., & Ng, V. (2001). _Flexible time series pattern matching based on perceptually important points._ Workshop on Learning from Temporal and Spatial Data, IJCAI.
+- White, H. (2000). _A reality check for data snooping._ Econometrica, 68(5), 1097–1126.
+- Martin, P. G. & McCann, B. B. (1989). _The Investor's Guide to Fidelity Funds._ (Origin of the Ulcer Index and Martin Ratio.)
