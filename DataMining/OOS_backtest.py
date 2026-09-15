@@ -36,12 +36,14 @@ def main():
 
     # Lists to store the concatenated Out-of-Sample results
     oos_dates = []
-    oos_returns = []
+    oos_log_returns = []
     oos_positions = []
     
     # Trade tracking
     trades_won = 0
     total_trades = 0
+    total_longs = 0
+    total_shorts = 0
 
     print("\n" + "="*50)
     print("🚀 STARTING WALK-FORWARD OUT-OF-SAMPLE TEST 🚀")
@@ -67,8 +69,8 @@ def main():
         test_series = log_data[test_mask]
         test_arr = test_series.to_numpy()
         
-        # Actual absolute returns for the test year (Price_t+1 - Price_t)
-        test_actual_returns = data['close'][test_mask].diff().shift(-1).fillna(0).to_numpy() / data['close'][test_mask].to_numpy()
+        # Use LOG returns consistently (diff of log prices = log returns)
+        test_log_returns = pd.Series(test_arr).diff().shift(-1).fillna(0).to_numpy()
 
         # 3. Train the Model on the 2-Year Window
         pip_miner = PIPPatternMiner(n_pips=n_pips, lookback=lookback, hold_period=hold_period)
@@ -79,6 +81,12 @@ def main():
         hold_counter = 0
         curr_pos = 0
         trade_entry_idx = -1
+        
+        # Per-year trade counters
+        year_long_trades = 0
+        year_short_trades = 0
+        year_trades_won = 0
+        year_total_trades = 0
 
         for j in range(lookback - 1, len(test_arr) - 1):
             if hold_counter > 0:
@@ -87,9 +95,10 @@ def main():
                 
                 # Check win/loss when trade ends
                 if hold_counter == 0:
-                    trade_return = np.sum(test_actual_returns[trade_entry_idx : j + 1])
+                    trade_return = np.sum(test_log_returns[trade_entry_idx : j + 1])
                     if (curr_pos == 1.0 and trade_return > 0) or (curr_pos == -1.0 and trade_return < 0):
                         trades_won += 1
+                        year_trades_won += 1
                     curr_pos = 0
             else:
                 window = test_arr[j - lookback + 1 : j + 1]
@@ -102,50 +111,54 @@ def main():
                     pos_array[j] = curr_pos
                     trade_entry_idx = j
                     total_trades += 1
+                    year_total_trades += 1
+                    if signal == 1.0:
+                        year_long_trades += 1
+                        total_longs += 1
+                    else:
+                        year_short_trades += 1
+                        total_shorts += 1
                 else:
                     curr_pos = 0
 
         # 5. Append this year's OOS results to our master list
         oos_dates.extend(test_series.index)
-        oos_returns.extend(test_actual_returns)
+        oos_log_returns.extend(test_log_returns)
         oos_positions.extend(pos_array)
         
-        strat_hourly_returns = pos_array * test_actual_returns
+        strat_hourly_returns = pos_array * test_log_returns
         
         # Calculate annualized Sharpe Ratio for 1h data (8760 hours/year)
-        # Assuming a risk-free rate of 0 for simplicity in crypto
         mean_ret = np.mean(strat_hourly_returns)
         std_ret = np.std(strat_hourly_returns)
-
-        if std_ret > 0:
-            sharpe_ratio = (mean_ret / std_ret) * np.sqrt(8760)
-        else:
-            sharpe_ratio = 0.0
+        sharpe_ratio = (mean_ret / std_ret) * np.sqrt(8760) if std_ret > 0 else 0.0
+        year_win_rate = (year_trades_won / year_total_trades * 100) if year_total_trades > 0 else 0
         
         # Quick summary for the year
-        year_strat_ret = np.exp(np.cumsum(pos_array * test_actual_returns))[-1] - 1
-        year_bh_ret = np.exp(np.cumsum(test_actual_returns))[-1] - 1
+        year_strat_ret = np.exp(np.cumsum(pos_array * test_log_returns))[-1] - 1
+        year_bh_ret = np.exp(np.cumsum(test_log_returns))[-1] - 1
         print(f"   -> OOS Strategy: {year_strat_ret*100:>7.2f}% | Benchmark: {year_bh_ret*100:>7.2f}% | Sharpe: {sharpe_ratio:>5.2f}")
+        print(f"      Longs: {year_long_trades} | Shorts: {year_short_trades} | Win Rate: {year_win_rate:.1f}%")
     # --- Compile Final Master OOS Metrics ---
     oos_dates = pd.to_datetime(oos_dates)
-    oos_returns = np.array(oos_returns)
+    oos_log_returns = np.array(oos_log_returns)
     oos_positions = np.array(oos_positions)
 
     # Strategy vs Benchmark Equity
-    strat_log_returns = oos_positions * oos_returns
-    eq_strat = np.exp(np.cumsum(strat_log_returns))
-    eq_bh = np.exp(np.cumsum(oos_returns))
+    strat_returns = oos_positions * oos_log_returns
+    eq_strat = np.exp(np.cumsum(strat_returns))
+    eq_bh = np.exp(np.cumsum(oos_log_returns))
     
     drawdown = calculate_drawdown(eq_strat)
     max_dd = np.min(drawdown) * 100
     win_rate = (trades_won / total_trades * 100) if total_trades > 0 else 0
 
-    mean_strat = np.mean(strat_log_returns)
-    std_strat = np.std(strat_log_returns)
+    mean_strat = np.mean(strat_returns)
+    std_strat = np.std(strat_returns)
     final_sharpe = (mean_strat / std_strat) * np.sqrt(8760) if std_strat > 0 else 0.0
 
-    mean_bh = np.mean(oos_returns)
-    std_bh = np.std(oos_returns)
+    mean_bh = np.mean(oos_log_returns)
+    std_bh = np.std(oos_log_returns)
     final_bh_sharpe = (mean_bh / std_bh) * np.sqrt(8760) if std_bh > 0 else 0.0
 
     print("\n" + "="*50)
@@ -156,7 +169,7 @@ def main():
     print(f"Strategy Sharpe:      {final_sharpe:>8.2f}")
     print(f"Benchmark Sharpe:     {final_bh_sharpe:>8.2f}")
     print(f"Maximum Drawdown:     {max_dd:>8.2f}%")
-    print(f"Total Trades Taken:   {total_trades}")
+    print(f"Total Trades Taken:   {total_trades} (Long: {total_longs}, Short: {total_shorts})")
     print(f"True Win Rate:        {win_rate:>8.2f}%")
     print("="*50)
 

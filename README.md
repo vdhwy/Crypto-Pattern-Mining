@@ -403,12 +403,12 @@ Trained on pre-2024 data, the miner generates long-only, short-only, and combine
 
 | Portfolio | Return | Annualized Sharpe |
 |-----------|--------|-------------------|
-| **Combined Strategy** | **1635.10%** | **1.75** |
-| Long Only | 441.16% | 1.55 |
-| Short Only | 250.79% | 1.03 |
+| **Combined Strategy** | **330.03%** | **3.30** |
+| Long Only | 196.27% | 2.64 |
+| Short Only | 85.06% | 2.61 |
 | Buy & Hold | 487.23% | 0.64 |
 
-The combined long/short strategy significantly outperforms Buy & Hold on a risk-adjusted basis (Sharpe 1.75 vs 0.64), demonstrating the value of the discovered directional pattern signals.
+> **Note:** The combined long/short strategy has a much higher Sharpe Ratio (3.30 vs 0.64) than Buy & Hold despite lower absolute returns, because it is only exposed to the market during the 6-hour windows following a pattern signal — dramatically reducing risk.
 
 ---
 
@@ -432,24 +432,27 @@ The walk-forward OOS backtest uses rolling 2-year training windows to test on un
 
 #### Per-Window Performance
 
-| Window | Training | Testing | Strategy Return | Benchmark Return | Sharpe |
-|--------|----------|---------|-----------------|------------------|--------|
-| 1 | 2019–2020 | 2021 | +72.81% | +130.84% | 1.30 |
-| 2 | 2020–2021 | 2022 | **+21.23%** | **-56.55%** | 0.47 |
-| 3 | 2021–2022 | 2023 | +18.98% | +180.00% | 0.78 |
-| 4 | 2022–2023 | 2024 | +32.94% | +152.84% | 1.26 |
+| Window | Training | Testing | Strategy Return | Benchmark (B&H) | Sharpe | Longs | Shorts | Win Rate |
+|--------|----------|---------|-----------------|------------------|--------|-------|--------|----------|
+| 1 | 2019–2020 | 2021 | +33.47% | +59.34% | 1.04 | 165 | 220 | 52.7% |
+| 2 | 2020–2021 | 2022 | **+21.30%** | **-64.40%** | 0.63 | 131 | 280 | 52.3% |
+| 3 | 2021–2022 | 2023 | +10.41% | +156.07% | 0.31 | 204 | 210 | 51.0% |
+| 4 | 2022–2023 | 2024 | +6.22% | +120.49% | 0.26 | 254 | 162 | 48.6% |
 
 #### Aggregate OOS Metrics
 
 | Metric | Strategy | Benchmark |
 |--------|----------|-----------|
-| **Total Return** | **231.37%** | 610.03% |
-| **Annualized Sharpe** | **0.90** | 0.77 |
-| **Maximum Drawdown** | **-23.15%** | — |
-| Total Trades | 1,591 | — |
-| Win Rate | 49.84% | — |
+| **Total Return** | **89.33%** | 359.85% |
+| **Annualized Sharpe** | **0.55** | 0.58 |
+| **Maximum Drawdown** | **-20.08%** | — |
+| Total Trades | 1,626 (754 Long / 872 Short) | — |
+| Win Rate | 51.18% | — |
 
-Key takeaway: while Buy & Hold captures more absolute return during strong bull markets, the strategy achieves a **higher Sharpe Ratio (0.90 vs 0.77)** out-of-sample with significantly **lower drawdowns (-23.15%)**. Notably, during the 2022 bear market, the strategy returned **+21.23%** while the benchmark lost **-56.55%**.
+Key takeaways:
+- The strategy is **profitable in every single OOS year**, including during the 2022 bear market where it returned **+21.30%** while Buy & Hold lost **-64.40%**.
+- The strategy significantly **underperforms Buy & Hold** in absolute return during strong bull markets (2023, 2024) because it is only in the market ~6 hours at a time when a signal fires.
+- The strategy maintains a **controlled drawdown (-20.08%)** compared to Buy & Hold's steep drawdowns during bear markets.
 
 ---
 

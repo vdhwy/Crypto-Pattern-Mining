@@ -407,7 +407,7 @@ def export_oos_backtest():
     hold_period = 6
     
     oos_dates = []
-    oos_returns = []
+    oos_log_returns = []
     oos_positions = []
     trades_won = 0
     total_trades = 0
@@ -430,7 +430,9 @@ def export_oos_backtest():
         test_mask = (data['year'] == test_year)
         test_series = log_data[test_mask]
         test_arr = test_series.to_numpy()
-        test_actual_returns = data['close'][test_mask].diff().shift(-1).fillna(0).to_numpy() / data['close'][test_mask].to_numpy()
+        
+        # Use LOG returns consistently (diff of log prices = log returns)
+        test_log_returns = pd.Series(test_arr).diff().shift(-1).fillna(0).to_numpy()
         
         pip_miner = PIPPatternMiner(n_pips=n_pips, lookback=lookback, hold_period=hold_period)
         pip_miner.train(train_arr, n_reps=-1)
@@ -440,14 +442,21 @@ def export_oos_backtest():
         curr_pos = 0
         trade_entry_idx = -1
         
+        # Per-year trade counters
+        year_long_trades = 0
+        year_short_trades = 0
+        year_trades_won = 0
+        year_total_trades = 0
+        
         for j in range(lookback - 1, len(test_arr) - 1):
             if hold_counter > 0:
                 pos_array[j] = curr_pos
                 hold_counter -= 1
                 if hold_counter == 0:
-                    trade_return = np.sum(test_actual_returns[trade_entry_idx : j + 1])
+                    trade_return = np.sum(test_log_returns[trade_entry_idx : j + 1])
                     if (curr_pos == 1.0 and trade_return > 0) or (curr_pos == -1.0 and trade_return < 0):
                         trades_won += 1
+                        year_trades_won += 1
                     curr_pos = 0
             else:
                 window = test_arr[j - lookback + 1 : j + 1]
@@ -459,51 +468,67 @@ def export_oos_backtest():
                     pos_array[j] = curr_pos
                     trade_entry_idx = j
                     total_trades += 1
+                    year_total_trades += 1
+                    if signal == 1.0:
+                        year_long_trades += 1
+                    else:
+                        year_short_trades += 1
                 else:
                     curr_pos = 0
         
         oos_dates.extend(test_series.index)
-        oos_returns.extend(test_actual_returns)
+        oos_log_returns.extend(test_log_returns)
         oos_positions.extend(pos_array)
         
-        strat_hourly_returns = pos_array * test_actual_returns
+        strat_hourly_returns = pos_array * test_log_returns
         mean_ret = np.mean(strat_hourly_returns)
         std_ret = np.std(strat_hourly_returns)
         sharpe_ratio = (mean_ret / std_ret) * np.sqrt(8760) if std_ret > 0 else 0.0
         
-        year_strat_ret = np.exp(np.cumsum(pos_array * test_actual_returns))[-1] - 1
-        year_bh_ret = np.exp(np.cumsum(test_actual_returns))[-1] - 1
+        year_strat_ret = np.exp(np.cumsum(pos_array * test_log_returns))[-1] - 1
+        year_bh_ret = np.exp(np.cumsum(test_log_returns))[-1] - 1
+        year_win_rate = (year_trades_won / year_total_trades * 100) if year_total_trades > 0 else 0
         
         window_results.append({
             'window': f"{train_year_1}-{train_year_2} → {test_year}",
+            'test_year': test_year,
             'strat_return': year_strat_ret * 100,
             'bh_return': year_bh_ret * 100,
             'sharpe': sharpe_ratio,
+            'long_trades': year_long_trades,
+            'short_trades': year_short_trades,
+            'total_trades': year_total_trades,
+            'win_rate': year_win_rate,
         })
         
         print(f"      -> OOS Strategy: {year_strat_ret*100:>7.2f}% | Benchmark: {year_bh_ret*100:>7.2f}% | Sharpe: {sharpe_ratio:>5.2f}")
+        print(f"         Longs: {year_long_trades} | Shorts: {year_short_trades} | Win Rate: {year_win_rate:.1f}%")
     
     # Final metrics
     oos_dates = pd.to_datetime(oos_dates)
-    oos_returns = np.array(oos_returns)
+    oos_log_returns = np.array(oos_log_returns)
     oos_positions = np.array(oos_positions)
     
-    strat_log_returns = oos_positions * oos_returns
-    eq_strat = np.exp(np.cumsum(strat_log_returns))
-    eq_bh = np.exp(np.cumsum(oos_returns))
+    strat_returns = oos_positions * oos_log_returns
+    eq_strat = np.exp(np.cumsum(strat_returns))
+    eq_bh = np.exp(np.cumsum(oos_log_returns))
     
     running_max = np.maximum.accumulate(eq_strat)
     drawdown = (eq_strat - running_max) / running_max
     max_dd = np.min(drawdown) * 100
     win_rate = (trades_won / total_trades * 100) if total_trades > 0 else 0
     
-    mean_strat = np.mean(strat_log_returns)
-    std_strat = np.std(strat_log_returns)
+    mean_strat = np.mean(strat_returns)
+    std_strat = np.std(strat_returns)
     final_sharpe = (mean_strat / std_strat) * np.sqrt(8760) if std_strat > 0 else 0.0
     
-    mean_bh = np.mean(oos_returns)
-    std_bh = np.std(oos_returns)
+    mean_bh = np.mean(oos_log_returns)
+    std_bh = np.std(oos_log_returns)
     final_bh_sharpe = (mean_bh / std_bh) * np.sqrt(8760) if std_bh > 0 else 0.0
+    
+    # Total long/short counts
+    total_longs = sum(w['long_trades'] for w in window_results)
+    total_shorts = sum(w['short_trades'] for w in window_results)
     
     print(f"\n   FINAL OOS METRICS:")
     print(f"   Total Return:      {(eq_strat[-1] - 1) * 100:>8.2f}%")
@@ -511,7 +536,7 @@ def export_oos_backtest():
     print(f"   Strategy Sharpe:   {final_sharpe:>8.2f}")
     print(f"   Benchmark Sharpe:  {final_bh_sharpe:>8.2f}")
     print(f"   Maximum Drawdown:  {max_dd:>8.2f}%")
-    print(f"   Total Trades:      {total_trades}")
+    print(f"   Total Trades:      {total_trades} (Long: {total_longs}, Short: {total_shorts})")
     print(f"   Win Rate:          {win_rate:>8.2f}%")
     
     # Plot
@@ -544,6 +569,8 @@ def export_oos_backtest():
         'bh_sharpe': final_bh_sharpe,
         'max_dd': max_dd,
         'total_trades': total_trades,
+        'total_longs': total_longs,
+        'total_shorts': total_shorts,
         'win_rate': win_rate,
         'windows': window_results,
     }
